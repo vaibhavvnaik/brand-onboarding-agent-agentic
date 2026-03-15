@@ -1,0 +1,203 @@
+name: Issue → Agent Pipeline
+
+# ─────────────────────────────────────────────
+# TRIGGER: fires when a new issue is opened
+# ─────────────────────────────────────────────
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write   # create branches
+  issues: write     # label, comment, assign
+
+jobs:
+  branch-and-assign:
+    name: Label → Branch → Trigger Claude
+    runs-on: ubuntu-latest
+
+    # Safety: never react to bots opening issues
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'claude[bot]'         &&
+      github.actor != 'codex[bot]'          &&
+      github.actor != 'dependabot[bot]'
+
+    steps:
+      # ── 1. Simple keyword-based labeling (non-blocking) ────────────
+      - name: Auto-label by keywords
+        id: label
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const text  = `${issue.title} ${issue.body || ''}`.toLowerCase();
+
+            // ── Detect issue type from keywords ──
+            let typeLabel = 'task';
+            if (/\b(bug|broken|crash|error|fail|fix|regression|not working)\b/.test(text))        typeLabel = 'bug';
+            else if (/\b(feat|feature|add|new|implement|create|build)\b/.test(text))               typeLabel = 'feature';
+            else if (/\b(enhance|improve|upgrade|update|better|optimize|perf)\b/.test(text))       typeLabel = 'enhancement';
+            else if (/\b(doc|docs|documentation|readme|comment|typo)\b/.test(text))                typeLabel = 'documentation';
+            else if (/\b(refactor|restructure|rewrite|cleanup|clean up|reorganize)\b/.test(text))  typeLabel = 'refactor';
+            else if (/\b(chore|ci|config|setup|infra|dependency|deps|bump)\b/.test(text))          typeLabel = 'chore';
+
+            // Try to ensure labels exist, skip gracefully if creation fails
+            const labelsToAdd = [];
+            const labelDefs = [
+              [typeLabel,         '0075ca', 'Issue type'],
+              ['agent-assigned',  '6f42c1', 'Coding agent is working on this'],
+            ];
+
+            for (const [name, color, description] of labelDefs) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  name
+                });
+                labelsToAdd.push(name);
+              } catch {
+                // Label doesn't exist — try to create it
+                try {
+                  await github.rest.issues.createLabel({
+                    owner: context.repo.owner,
+                    repo:  context.repo.repo,
+                    name, color, description
+                  });
+                  labelsToAdd.push(name);
+                } catch (createErr) {
+                  console.log(`Could not create label "${name}": ${createErr.message} — skipping`);
+                }
+              }
+            }
+
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issue.number,
+                labels:       labelsToAdd
+              });
+              console.log(`Applied labels: ${labelsToAdd.join(', ')}`);
+            }
+
+            core.setOutput('type_label', typeLabel);
+
+      # ── 2. Create a dedicated branch ───────────────────────────────
+      - name: Create feature branch
+        id: branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const slug  = issue.title
+              .toLowerCase()
+              .replace(/[^a-z0-9\s]/g, '')
+              .replace(/\s+/g, '-')
+              .slice(0, 50)
+              .replace(/-+$/, '');
+
+            const branchName = `issue-${issue.number}/${slug}`;
+
+            // Get default branch HEAD
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo:  context.repo.repo
+            });
+            const { data: ref } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              ref:   `heads/${repo.default_branch}`
+            });
+
+            // Create the branch
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              ref:   `refs/heads/${branchName}`,
+              sha:   ref.object.sha
+            });
+
+            core.setOutput('branch_name',    branchName);
+            core.setOutput('default_branch', repo.default_branch);
+            console.log(`Branch created: ${branchName}`);
+
+      # ── 3. Trigger Claude coding agent via @claude mention ─────────
+      #    IMPORTANT: Uses GH_PAT (Personal Access Token) instead of
+      #    the default GITHUB_TOKEN. Comments posted by GITHUB_TOKEN
+      #    do NOT trigger issue_comment events (GitHub anti-loop protection).
+      #    A PAT-posted comment WILL trigger the claude.yml workflow.
+      - name: Trigger Claude agent via comment
+        uses: actions/github-script@v7
+        env:
+          BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
+        with:
+          github-token: ${{ secrets.GH_PAT }}
+          script: |
+            const issue = context.payload.issue;
+            const branch = process.env.BRANCH_NAME;
+
+            const body = [
+              `@claude`,
+              ``,
+              `Please implement the following issue on branch \`${branch}\`:`,
+              ``,
+              `**${issue.title}**`,
+              ``,
+              issue.body ? issue.body.slice(0, 3000) : '_No description provided._',
+              ``,
+              `---`,
+              `**Instructions:**`,
+              `- Work on branch \`${branch}\` (already created)`,
+              `- Commit and push your changes to that branch`,
+              `- Do NOT open a pull request — the maintainer will do that`,
+              `- Keep commits focused and well-described`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: issue.number,
+              body
+            });
+            console.log('Posted @claude trigger comment (via PAT to trigger issue_comment event)');
+
+      # ── 4. Post a status comment on the issue ─────────────────────
+      - name: Post pipeline status comment
+        uses: actions/github-script@v7
+        env:
+          TYPE_LABEL:  ${{ steps.label.outputs.type_label }}
+          BRANCH_NAME: ${{ steps.branch.outputs.branch_name }}
+          DEF_BRANCH:  ${{ steps.branch.outputs.default_branch }}
+        with:
+          script: |
+            const issue      = context.payload.issue;
+            const repoUrl    = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const branchUrl  = `${repoUrl}/tree/${process.env.BRANCH_NAME}`;
+            const typeLabel  = process.env.TYPE_LABEL || 'task';
+
+            const body = `## 🚀 Issue Pipeline Activated
+
+            | Field | Value |
+            |-------|-------|
+            | **Type** | \`${typeLabel}\` |
+            | **Assigned Agent** | 🤖 Claude |
+            | **Branch** | [\`${process.env.BRANCH_NAME}\`](${branchUrl}) |
+
+            ### ⏭ What happens next
+            1. 🤖 Claude reads this issue and begins implementation on \`${process.env.BRANCH_NAME}\`
+            2. Code is pushed → Vercel builds a preview deployment automatically
+            3. A Vercel preview card will be posted here once deployed
+            4. **You create the PR and merge when you're satisfied** — no auto-PR will be opened
+
+            ---
+            *Pipeline triggered by [@${context.actor}](https://github.com/${context.actor})*`;
+
+            await github.rest.issues.createComment({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: issue.number,
+              body:         body.replace(/^            /gm, '')
+            });

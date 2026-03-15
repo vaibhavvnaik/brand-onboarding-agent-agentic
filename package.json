@@ -1,0 +1,49 @@
+{
+    "name": "brand-onboarding-agent",
+    "version": "1.0.0",
+    "description": "Automated brand discovery and newsletter onboarding agent for urklist.com",
+    "main": "index.js",
+    "scripts": {
+          "start": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node fix-encoding.js && node index.js",
+          "dev": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && nodemon index.js",
+          "agent": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node index.js --cli",
+          "job:discover": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js discover_and_signup",
+          "job:scan-inbox": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js scan_inbox",
+          "job:scan-full": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js scan_inbox_full_history",
+          "job:confirm": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js process_confirmations",
+          "job:ingest": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js ingest_newsletters",
+          "job:recover-signups": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js recover_failed_signups",
+          "job:backfill": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js backfill_listings",
+          "job:link-legacy-listings": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js link_legacy_listings_to_emails",
+          "job:scrub-sensitive-content": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js scrub_sensitive_content",
+          "job:backfill-gmail-labels": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js backfill_gmail_labels",
+          "job:migrate": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runMigration.js",
+          "job:cycle": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runSimplifiedPlan.js",
+          "job:agentic-cycle": "export LD_LIBRARY_PATH=./.local-libs/usr/lib/x86_64-linux-gnu:./.local-libs/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && node jobs/runJob.js run_agentic_cycle",
+          "check": "node --check agents/brandOnboardingAgent.js && node --check routes/api.js && node --check models/EmailMessage.js && node --check services/inboxProcessor.js && node --check services/confirmationProcessor.js && node --check services/newsletterIngestor.js && node --check jobs/runJob.js && node --check jobs/runSimplifiedPlan.js",
+          "postinstall": "npx playwright install chromium"
+    },
+    "dependencies": {
+          "axios": "^1.7.2",
+          "chalk": "^4.1.2",
+          "cheerio": "^1.0.0-rc.12",
+          "connect-mongo": "^5.1.0",
+          "cors": "^2.8.5",
+          "dotenv": "^16.4.5",
+          "express": "^4.19.2",
+          "express-rate-limit": "^7.3.1",
+          "express-session": "^1.18.0",
+          "googleapis": "^140.0.1",
+          "helmet": "^7.1.0",
+          "inquirer": "^8.2.6",
+          "mongoose": "^8.4.4",
+          "playwright": "^1.45.0",
+          "winston": "^3.13.0"
+    },
+    "devDependencies": {
+          "nodemon": "^3.1.4"
+    },
+    "engines": {
+          "node": ">=18.0.0"
+    }
+}

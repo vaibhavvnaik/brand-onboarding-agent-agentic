@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>urklist - Brand Intelligence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #0a0a0f; color: #e2e8f0; }
+    .glass { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(12px); }
+    .card-hover { transition: all 0.2s ease; }
+    .card-hover:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    .badge-active         { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-awaiting       { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-failed         { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    .badge-discovered     { background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
+    .badge-subscribing    { background: rgba(14,165,233,0.15); color: #38bdf8; border: 1px solid rgba(14,165,233,0.3); }
+    .badge-captcha        { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+    .badge-skipped        { background: rgba(100,116,139,0.15);color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+    .score-high  { color: #34d399; }
+    .score-mid   { color: #fbbf24; }
+    .score-low   { color: #f87171; }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    .pulse { animation: pulse-dot 1.5s ease-in-out infinite; }
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:50; backdrop-filter:blur(4px); }
+    .modal.open { display:flex; align-items:center; justify-content:center; }
+    input:focus, select:focus { outline:none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+    .panel-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .panel-table thead th { text-align: left; color: #94a3b8; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .panel-table tbody td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #cbd5e1; vertical-align: top; }
+    .panel-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .table-wrap { overflow-x: auto; max-height: 18rem; }
+    .mono-cell { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .wf-cell { font-size: 10px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; border-radius: 9999px; padding: 2px 8px; display: inline-block; }
+    .wf-done { background: rgba(16,185,129,.15); color: #34d399; border: 1px solid rgba(16,185,129,.35); }
+    .wf-pending { background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.35); }
+    .wf-failed { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.35); }
+    .wf-todo { background: rgba(100,116,139,.15); color: #94a3b8; border: 1px solid rgba(100,116,139,.35); }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- -- HEADER -------------------------------------------------- -->
+<header class="border-b border-white/5 glass sticky top-0 z-40">
+  <div class="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-sm font-bold">U</div>
+      <span class="font-bold text-lg tracking-tight">urklist</span>
+      <span class="text-slate-500 text-sm hidden sm:block">/ Brand Intelligence</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <div id="agentStatus" class="hidden items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
+        <span class="w-2 h-2 rounded-full bg-amber-400 pulse"></span>
+        Agent running...
+      </div>
+      <button onclick="openAgentModal()" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Run Agent
+      </button>
+      <a href="/dashboard/logout" class="text-slate-400 hover:text-white text-sm transition-colors">Sign Out</a>
+    </div>
+  </div>
+</header>
+
+<!-- -- STATS BAR ------------------------------------------------ -->
+<div class="max-w-screen-2xl mx-auto px-6 py-6">
+  <div id="statsBar" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+    <div class="glass rounded-xl p-4 col-span-1">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Total Brands</p>
+      <p id="stat-total" class="text-2xl font-bold mt-1">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Active</p>
+      <p id="stat-active" class="text-2xl font-bold mt-1 text-emerald-400">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Awaiting</p>
+      <p id="stat-awaiting" class="text-2xl font-bold mt-1 text-amber-400">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Failed</p>
+      <p id="stat-failed" class="text-2xl font-bold mt-1 text-red-400">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Discovered</p>
+      <p id="stat-discovered" class="text-2xl font-bold mt-1 text-indigo-400">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Avg Quality</p>
+      <p id="stat-quality" class="text-2xl font-bold mt-1">-</p>
+    </div>
+    <div class="glass rounded-xl p-4">
+      <p class="text-xs text-slate-400 uppercase tracking-wider">Avg Affiliate</p>
+      <p id="stat-affiliate" class="text-2xl font-bold mt-1">-</p>
+    </div>
+  </div>
+</div>
+
+<!-- -- FILTERS -------------------------------------------------- -->
+<div class="max-w-screen-2xl mx-auto px-6 pb-4">
+  <div class="glass rounded-xl p-4 mb-3">
+    <h3 class="text-sm font-semibold text-slate-200 mb-3">Brand Status Guide</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-slate-300">
+      <div><span class="badge-discovered px-2 py-0.5 rounded-full">Discovered</span> Candidate found, signup not started yet.</div>
+      <div><span class="badge-subscribing px-2 py-0.5 rounded-full">Subscribing</span> Browser automation is actively submitting form.</div>
+      <div><span class="badge-awaiting px-2 py-0.5 rounded-full">Awaiting</span> Signup submitted, waiting for welcome/confirmation email.</div>
+      <div><span class="badge-active px-2 py-0.5 rounded-full">Active</span> Newsletter stream confirmed and brand is ingesting.</div>
+      <div><span class="badge-failed px-2 py-0.5 rounded-full">Failed</span> Signup/form/confirmation failed or timed out.</div>
+      <div><span class="badge-captcha px-2 py-0.5 rounded-full">CAPTCHA</span> Blocked by anti-bot/captcha challenge.</div>
+      <div><span class="badge-skipped px-2 py-0.5 rounded-full">Skipped</span> Manually removed or intentionally skipped.</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-4 flex flex-wrap items-center gap-3">
+    <input id="searchInput" type="text" placeholder="Search brands, domains..."
+      class="flex-1 min-w-48 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500"
+      oninput="debounceSearch(this.value)">
+
+    <select id="filterStatus" onchange="applyFilters()" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300">
+      <option value="">All Statuses</option>
+      <option value="active">Active</option>
+      <option value="awaiting_confirmation">Awaiting Confirmation</option>
+      <option value="discovered">Discovered</option>
+      <option value="subscribing">Subscribing</option>
+      <option value="failed">Failed</option>
+      <option value="captcha_blocked">CAPTCHA Blocked</option>
+      <option value="skipped">Skipped</option>
+    </select>
+
+    <select id="filterCategory" onchange="applyFilters()" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300">
+      <option value="">All Categories</option>
+      <option>Fashion & Apparel</option><option>Beauty & Skincare</option>
+      <option>Health & Wellness</option><option>Home & Living</option>
+      <option>Food & Beverage</option><option>Fitness & Sports</option>
+      <option>Outdoor & Adventure</option><option>Tech & Gadgets</option>
+      <option>Sustainable & Eco</option><option>Baby & Kids</option>
+      <option>Pets</option><option>Travel & Luggage</option>
+      <option>Jewelry & Watches</option><option>Personal Care & Grooming</option>
+      <option>Gifts & Novelty</option><option>Office & Stationery</option>
+    </select>
+
+    <select id="filterTier" onchange="applyFilters()" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300">
+      <option value="">All Tiers</option>
+      <option value="luxury">Luxury</option>
+      <option value="premium">Premium</option>
+      <option value="established">Established</option>
+      <option value="emerging">Emerging</option>
+      <option value="niche">Niche</option>
+    </select>
+
+    <select id="filterSort" onchange="applyFilters()" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300">
+      <option value="-createdAt">Newest First</option>
+      <option value="-qualityScore">Highest Quality</option>
+      <option value="-affiliatePotentialScore">Best Affiliate</option>
+      <option value="name">A-Z</option>
+    </select>
+
+    <button onclick="applyFilters()" class="px-4 py-2 glass hover:bg-white/10 rounded-lg text-sm transition-colors">
+       Refresh
+    </button>
+
+    <span id="resultCount" class="text-slate-500 text-sm ml-auto"></span>
+  </div>
+</div>
+
+<!-- -- OPERATIONS ------------------------------------------------- -->
+<div class="max-w-screen-2xl mx-auto px-6 pb-4">
+  <div class="glass rounded-xl p-4 mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-200">Screenshot Repair</h3>
+        <p class="text-[11px] text-slate-500 mt-1">Retake broken or half-loaded listing screenshots using the production retake pipeline.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="retakeScreenshotsBtn" onclick="triggerRetakeScreenshots()" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded transition-colors">
+          Retake Broken Screenshots
+        </button>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
+      <label class="text-xs text-slate-400">
+        Batch Size
+        <input id="retakeBatchSize" type="number" min="25" max="500" value="200" class="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-slate-200">
+      </label>
+      <label class="text-xs text-slate-400">
+        Max Batches
+        <input id="retakeMaxBatches" type="number" min="1" max="200" value="50" class="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-slate-200">
+      </label>
+      <label class="text-xs text-slate-400">
+        Skip Already Retaken
+        <select id="retakeSkipAlready" class="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-slate-200">
+          <option value="true" selected>true</option>
+          <option value="false">false</option>
+        </select>
+      </label>
+    </div>
+    <div id="retakeScreenshotsStatus" class="text-xs text-slate-400">No retake job started from dashboard in this session.</div>
+  </div>
+
+  <div class="glass rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-200">Brand Workflow Matrix</h3>
+        <p class="text-[11px] text-slate-500 mt-1">Rows = brands, columns = workflow steps and substeps.</p>
+      </div>
+      <button onclick="loadWorkflowMatrix()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Refresh</button>
+    </div>
+    <div id="workflowMatrix" class="text-xs text-slate-300">
+      <div class="text-slate-500">Loading workflow matrix...</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-200">Workflow Step History</h3>
+      <button onclick="loadWorkflowRuns()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Refresh</button>
+    </div>
+    <div id="workflowRuns" class="text-xs text-slate-300">
+      <div class="text-slate-500">Loading workflow history...</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-200">Manual Signup Queue (Cowork Export)</h3>
+        <p class="text-[11px] text-slate-500 mt-1">Failed/captcha-blocked brands with metadata for bulk manual signup handoff.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="loadFailedSignupQueue()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Refresh</button>
+        <button onclick="copyFailedQueueJSON()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Copy JSON</button>
+        <button onclick="copyCoworkPrompts()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Copy Cowork Prompt</button>
+        <a href="/api/brands/failed-signup-queue?format=csv&limit=500&days=30" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Download CSV</a>
+      </div>
+    </div>
+    <div id="failedSignupQueue" class="text-xs text-slate-300">
+      <div class="text-slate-500">Loading manual signup queue...</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-200">Persistent Activity Logs</h3>
+      <button onclick="loadActivityLogs()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Refresh</button>
+    </div>
+    <div id="activityLogs" class="text-xs text-slate-300">
+      <div class="text-slate-500">Loading logs...</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-200">Ingested Newsletter Screenshots</h3>
+      <button onclick="loadNewsletterArtifacts()" class="text-xs px-2 py-1 glass rounded hover:bg-white/10">Refresh</button>
+    </div>
+    <div id="newsletterArtifacts" class="text-xs text-slate-300">
+      <div class="text-slate-500">Loading artifacts...</div>
+    </div>
+  </div>
+</div>
+
+<!-- -- BRAND GRID ------------------------------------------------ -->
+<div class="max-w-screen-2xl mx-auto px-6 pb-12">
+  <div id="brandGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <!-- Brand cards injected here -->
+  </div>
+  <div id="loadingState" class="text-center py-16 text-slate-500">
+    <div class="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+    Loading brands...
+  </div>
+  <div id="emptyState" class="hidden text-center py-16 text-slate-500">
+    <p class="text-4xl mb-4"></p>
+    <p class="text-lg">No brands found</p>
+    <p class="text-sm mt-2">Try adjusting filters or run the agent to discover new brands</p>
+  </div>
+  <!-- Pagination -->
+  <div id="pagination" class="flex items-center justify-center gap-3 mt-8 hidden">
+    <button id="prevPage" onclick="changePage(-1)" class="px-4 py-2 glass hover:bg-white/10 rounded-lg text-sm transition-colors disabled:opacity-30"><- Previous</button>
+    <span id="pageInfo" class="text-sm text-slate-400"></span>
+    <button id="nextPage" onclick="changePage(1)" class="px-4 py-2 glass hover:bg-white/10 rounded-lg text-sm transition-colors disabled:opacity-30">Next -></button>
+  </div>
+</div>
+
+<!-- -- BRAND DETAIL MODAL ---------------------------------------- -->
+<div id="brandModal" class="modal" onclick="if(event.target===this)closeBrandModal()">
+  <div class="glass rounded-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+    <div id="modalContent" class="p-6"></div>
+  </div>
+</div>
+
+<!-- -- AGENT MODAL ----------------------------------------------- -->
+<div id="agentModal" class="modal" onclick="if(event.target===this)closeAgentModal()">
+  <div class="glass rounded-2xl w-full max-w-md mx-4 p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-xl font-bold"> Run Brand Onboarding Agent</h2>
+      <button onclick="closeAgentModal()" class="text-slate-400 hover:text-white"></button>
+    </div>
+    <div class="space-y-5">
+      <div>
+        <label class="block text-sm font-medium text-slate-300 mb-2">Brands to discover</label>
+        <input type="number" id="agentBatchSize" value="10" min="1" max="200"
+          class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white">
+        <p class="text-xs text-slate-500 mt-1">Recommended: 10-25 per run</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-300 mb-2">Mode</label>
+        <select id="agentMode" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-slate-300">
+          <option value="full"> Full run (discover + sign up + confirm + categorize)</option>
+          <option value="discover"> Discovery only (no signup)</option>
+          <option value="scan_emails"> Scan recent emails</option>
+          <option value="stale_check">  Mark stale brands</option>
+        </select>
+      </div>
+      <div id="agentError" class="hidden p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300 text-sm"></div>
+      <div id="agentSuccess" class="hidden p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-emerald-300 text-sm"></div>
+      <div class="flex gap-3">
+        <button onclick="closeAgentModal()" class="flex-1 py-2.5 glass hover:bg-white/10 rounded-lg text-sm transition-colors">Cancel</button>
+        <button onclick="startAgent()" id="startAgentBtn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-semibold transition-colors">
+          Start Agent ->
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- -- JAVASCRIPT ------------------------------------------------ -->
+<script>
+let currentPage = 1;
+let currentFilters = {};
+let searchTimer = null;
+let agentPollTimer = null;
+let failedSignupQueueRows = [];
+
+// -- Init --------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+  loadStats();
+  loadBrands();
+  loadWorkflowMatrix();
+  checkAgentStatus();
+  loadActivityLogs();
+  loadNewsletterArtifacts();
+  loadWorkflowRuns();
+  loadFailedSignupQueue();
+});
+
+// -- Stats -------------------------------------------------------
+async function loadStats() {
+  try {
+    const res = await fetch('/api/brands/stats');
+    if (res.status === 401) {
+      window.location.href = '/dashboard/login';
+      return;
+    }
+    if (!res.ok) throw new Error(`Stats request failed: ${res.status}`);
+    const data = await res.json();
+    const g = data.general || {};
+    document.getElementById('stat-total').textContent     = g.total || 0;
+    document.getElementById('stat-active').textContent    = g.active || 0;
+    document.getElementById('stat-awaiting').textContent  = g.awaitingConfirmation || 0;
+    document.getElementById('stat-failed').textContent    = g.failed || 0;
+    document.getElementById('stat-discovered').textContent= g.discovered || 0;
+    document.getElementById('stat-quality').textContent   = g.avgQuality ? g.avgQuality.toFixed(1) : '-';
+    document.getElementById('stat-affiliate').textContent = g.avgAffiliate ? g.avgAffiliate.toFixed(1) : '-';
+  } catch(e) { console.error('Stats error', e); }
+}
+
+// -- Brands ------------------------------------------------------
+async function loadBrands() {
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('brandGrid').innerHTML = '';
+  document.getElementById('emptyState').classList.add('hidden');
+
+  const params = new URLSearchParams({
+    page: currentPage,
+    limit: 32,
+    sort: document.getElementById('filterSort').value,
+    ...currentFilters
+  });
+  // Remove empty
+  for (const [k, v] of [...params.entries()]) if (!v) params.delete(k);
+
+  try {
+    const res = await fetch('/api/brands?' + params);
+    if (res.status === 401) {
+      window.location.href = '/dashboard/login';
+      return;
+    }
+    if (!res.ok) throw new Error(`Brands request failed: ${res.status}`);
+    const data = await res.json();
+
+    if (!data.brands || data.brands.length === 0) {
+      document.getElementById('emptyState').classList.remove('hidden');
+      document.getElementById('pagination').classList.add('hidden');
+      document.getElementById('resultCount').textContent = '0 brands';
+      return;
+    }
+
+    renderBrands(data.brands);
+    renderPagination(data.pagination);
+    document.getElementById('resultCount').textContent = `${data.pagination.total} brands`;
+  } catch(e) {
+    console.error('Load error', e);
+  } finally {
+    document.getElementById('loadingState').classList.add('hidden');
+  }
+}
+
+function renderBrands(brands) {
+  const grid = document.getElementById('brandGrid');
+  grid.innerHTML = brands.map(b => `
+    <div class="glass rounded-xl p-5 card-hover cursor-pointer" onclick='openBrandModal(${JSON.stringify(b._id)})'>
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-lg font-bold text-white/60">
+            ${(b.logoUrl
+              ? `<img src="${b.logoUrl}" class="w-full h-full rounded-lg object-cover" onerror="this.parentElement.textContent='${b.name[0]}'"`
+              : b.name[0].toUpperCase())}
+          </div>
+          <div>
+            <h3 class="font-semibold text-sm leading-tight">${escHtml(b.name)}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">${b.domain}</p>
+          </div>
+        </div>
+        <span class="badge-${statusClass(b.onboardingStatus)} text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
+          ${statusLabel(b.onboardingStatus)}
+        </span>
+      </div>
+
+      ${b.description ? `<p class="text-xs text-slate-400 line-clamp-2 mb-3">${escHtml(b.description)}</p>` : ''}
+      ${(b.onboardingStatus === 'failed' || b.onboardingStatus === 'captcha_blocked') && b.signupFailureCategory
+        ? `<p class="text-xs text-red-300 mb-2">Failure: ${escHtml(b.signupFailureCategory)}${b.signupFailureCode ? ` / ${escHtml(b.signupFailureCode)}` : ''}</p>`
+        : ''}
+
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        ${b.primaryCategory ? `<span class="text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-full">${b.primaryCategory}</span>` : ''}
+        ${b.brandTier ? `<span class="text-xs bg-white/5 text-slate-400 border border-white/10 px-2 py-0.5 rounded-full capitalize">${b.brandTier}</span>` : ''}
+        ${b.priceRange ? `<span class="text-xs bg-white/5 text-slate-400 border border-white/10 px-2 py-0.5 rounded-full capitalize">${b.priceRange}</span>` : ''}
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-white/5">
+        <div class="flex items-center gap-3 text-xs">
+          <span class="flex items-center gap-1">
+            <span class="text-slate-500">Quality</span>
+            <span class="${scoreClass(b.qualityScore)} font-semibold">${b.qualityScore || '-'}</span>
+          </span>
+          <span class="flex items-center gap-1">
+            <span class="text-slate-500">Affiliate</span>
+            <span class="${scoreClass(b.affiliatePotentialScore)} font-semibold">${b.affiliatePotentialScore || '-'}</span>
+          </span>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+          ${b.espProvider && b.espProvider !== 'unknown' ? `<span class="bg-white/5 px-1.5 py-0.5 rounded text-slate-400">${b.espProvider}</span>` : ''}
+          ${b.isStale ? `<span class="text-red-400">[WARN] Stale</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// -- Brand Detail Modal ------------------------------------------
+async function openBrandModal(brandId) {
+  document.getElementById('brandModal').classList.add('open');
+  document.getElementById('modalContent').innerHTML = '<div class="text-center py-8 text-slate-400">Loading...</div>';
+  try {
+    const res = await fetch(`/api/brands/${brandId}`);
+    const b = await res.json();
+    document.getElementById('modalContent').innerHTML = buildModalContent(b);
+  } catch(e) {
+    document.getElementById('modalContent').innerHTML = '<div class="text-red-400">Failed to load brand</div>';
+  }
+}
+
+function buildModalContent(b) {
+  const tags = [...(b.tags || []), ...(b.lifestyleTags || [])].slice(0, 10);
+  return `
+    <div class="flex items-start justify-between mb-6">
+      <div>
+        <h2 class="text-xl font-bold">${escHtml(b.name)}</h2>
+        <a href="https://${b.domain}" target="_blank" class="text-indigo-400 hover:text-indigo-300 text-sm mt-1 inline-flex items-center gap-1">
+          ${b.domain} 
+        </a>
+      </div>
+      <button onclick="closeBrandModal()" class="text-slate-400 hover:text-white ml-4 flex-shrink-0"></button>
+    </div>
+
+    ${b.description ? `<p class="text-slate-400 text-sm mb-5">${escHtml(b.description)}</p>` : ''}
+
+    <div class="grid grid-cols-2 gap-3 mb-5">
+      ${infoRow('Status', `<span class="badge-${statusClass(b.onboardingStatus)} text-xs px-2 py-0.5 rounded-full">${statusLabel(b.onboardingStatus)}</span>`)}
+      ${infoRow('Category', b.primaryCategory || '-')}
+      ${infoRow('Brand Tier', capitalize(b.brandTier) || '-')}
+      ${infoRow('Price Range', capitalize(b.priceRange) || '-')}
+      ${infoRow('Quality Score', `<span class="${scoreClass(b.qualityScore)} font-bold">${b.qualityScore || '-'}/10</span>`)}
+      ${infoRow('Affiliate Score', `<span class="${scoreClass(b.affiliatePotentialScore)} font-bold">${b.affiliatePotentialScore || '-'}/10</span>`)}
+      ${infoRow('ESP', b.espProvider !== 'unknown' ? capitalize(b.espProvider) : '-')}
+      ${infoRow('Frequency', b.newsletterFrequency ? capitalize(b.newsletterFrequency.replace('_', ' ')) : '-')}
+      ${infoRow('Source', b.source || '-')}
+      ${infoRow('Total Emails', b.totalEmailsReceived || 0)}
+      ${infoRow('Has Affiliate Program', b.hasAffiliateProgram ? '[OK] Yes' : '-')}
+      ${infoRow('Est. Rev Share', b.estimatedRevShare || '-')}
+      ${infoRow('Signup Failure Category', b.signupFailureCategory || '-')}
+      ${infoRow('Signup Failure Code', b.signupFailureCode || '-')}
+    </div>
+
+    ${(b.signupError || b.signupFailureCategory) ? `
+    <div class="glass rounded-xl p-4 mb-4 border border-red-500/20">
+      <p class="text-xs font-semibold text-red-300 uppercase tracking-wider mb-2">Signup Failure Diagnostics</p>
+      <p class="text-xs text-slate-300"><span class="text-slate-500">At:</span> ${b.signupFailureAt ? escHtml(fmtDate(b.signupFailureAt)) : '-'}</p>
+      <p class="text-xs text-slate-300 mt-1"><span class="text-slate-500">Error:</span> ${escHtml(b.signupError || '-')}</p>
+      ${(b.signupFailureDiagnostic && Array.isArray(b.signupFailureDiagnostic.attemptTrace) && b.signupFailureDiagnostic.attemptTrace.length)
+        ? `<div class="mt-2 pt-2 border-t border-white/10">
+            <p class="text-xs text-slate-500 mb-1">Strategy attempts:</p>
+            ${b.signupFailureDiagnostic.attemptTrace.map((a) =>
+              `<p class="text-xs text-slate-400">${escHtml(a.strategy || 'unknown')}  ${a.success ? 'success' : 'failed'}  ${a.durationMs || 0}ms${a.reason ? `  ${escHtml(a.reason)}` : ''}</p>`
+            ).join('')}
+          </div>`
+        : ''}
+      ${(b.signupFailureScreenshotPath)
+        ? `<div class="mt-2"><a target="_blank" class="text-xs text-indigo-300 hover:text-indigo-200 underline" href="/api/brands/${b._id}/signup-failure-screenshot">Open failure screenshot</a></div>`
+        : ''}
+    </div>` : ''}
+
+    ${b.currentSenderEmail ? `
+    <div class="glass rounded-xl p-4 mb-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"> Sender Email</p>
+      <p class="text-sm font-mono text-emerald-300">${b.currentSenderEmail}</p>
+      ${(b.senderEmailHistory || []).length > 1 ? `
+        <div class="mt-2 pt-2 border-t border-white/5">
+          <p class="text-xs text-slate-500 mb-1">History:</p>
+          ${b.senderEmailHistory.map(h => `<p class="text-xs text-slate-400 font-mono">${h.email} <span class="text-slate-600">(${h.reason}, ${new Date(h.firstSeenAt).toLocaleDateString()})</span></p>`).join('')}
+        </div>` : ''}
+    </div>` : ''}
+
+    ${b.targetDemographic?.length ? `
+    <div class="mb-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Target Audience</p>
+      <div class="flex flex-wrap gap-2">
+        ${b.targetDemographic.map(d => `<span class="text-xs bg-purple-500/15 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-full">${d}</span>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${tags.length ? `
+    <div class="mb-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tags</p>
+      <div class="flex flex-wrap gap-1.5">
+        ${tags.map(t => `<span class="text-xs bg-white/5 text-slate-400 border border-white/10 px-2 py-0.5 rounded-full">${t}</span>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${b.affiliateNetworks?.length ? `
+    <div class="mb-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Affiliate Networks</p>
+      <div class="flex flex-wrap gap-2">
+        ${b.affiliateNetworks.map(n => `<span class="text-xs bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-full">${n}</span>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${b.sampleSubjectLines?.length ? `
+    <div class="glass rounded-xl p-4 mb-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"> Sample Subject Lines</p>
+      ${b.sampleSubjectLines.map(s => `<p class="text-xs text-slate-300 py-1 border-b border-white/5 last:border-0">"${escHtml(s)}"</p>`).join('')}
+    </div>` : ''}
+
+    ${b.notes ? `<div class="glass rounded-xl p-4 mb-4"><p class="text-xs text-slate-400">${escHtml(b.notes)}</p></div>` : ''}
+
+    <div class="flex gap-3 pt-2">
+      <a href="https://${b.domain}" target="_blank" class="flex-1 text-center py-2 glass hover:bg-white/10 rounded-lg text-sm transition-colors">
+        Visit Website 
+      </a>
+      ${b.affiliateSignupUrl ? `<a href="${b.affiliateSignupUrl}" target="_blank" class="flex-1 text-center py-2 bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/30 rounded-lg text-sm text-emerald-300 transition-colors">Join Affiliate </a>` : ''}
+    </div>
+    <p class="text-xs text-slate-600 mt-3 text-center">Added ${new Date(b.createdAt).toLocaleDateString()}</p>
+  `;
+}
+
+function closeBrandModal() { document.getElementById('brandModal').classList.remove('open'); }
+
+// -- Agent Modal -------------------------------------------------
+function openAgentModal() { document.getElementById('agentModal').classList.add('open'); }
+function closeAgentModal() { document.getElementById('agentModal').classList.remove('open'); }
+
+async function startAgent() {
+  const batchSize = parseInt(document.getElementById('agentBatchSize').value);
+  const mode      = document.getElementById('agentMode').value;
+  const errEl     = document.getElementById('agentError');
+  const sucEl     = document.getElementById('agentSuccess');
+  const btn       = document.getElementById('startAgentBtn');
+
+  errEl.classList.add('hidden'); sucEl.classList.add('hidden');
+
+  if (!batchSize || batchSize < 1 || batchSize > 200) {
+    errEl.textContent = 'Batch size must be between 1 and 200';
+    errEl.classList.remove('hidden'); return;
+  }
+
+  btn.textContent = 'Starting...'; btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchSize, mode })
+    });
+    const data = await res.json();
+    if (res.status === 409) {
+      errEl.textContent = 'Agent is already running!';
+      errEl.classList.remove('hidden');
+    } else {
+      sucEl.textContent = `[OK] Agent started! Discovering ${batchSize} brands in ${mode} mode...`;
+      sucEl.classList.remove('hidden');
+      document.getElementById('agentStatus').classList.remove('hidden');
+      document.getElementById('agentStatus').style.display = 'flex';
+      pollAgentStatus();
+    }
+  } catch(e) {
+    errEl.textContent = 'Failed to start agent: ' + e.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.textContent = 'Start Agent ->';
+    btn.disabled = false;
+  }
+}
+
+async function checkAgentStatus() {
+  try {
+    const res = await fetch('/api/agent/status');
+    const data = await res.json();
+    const indicator = document.getElementById('agentStatus');
+    if (data.running) {
+      indicator.style.display = 'flex';
+      if (!agentPollTimer) pollAgentStatus();
+    } else {
+      indicator.style.display = 'none';
+    }
+  } catch {}
+}
+
+function pollAgentStatus() {
+  if (agentPollTimer) clearInterval(agentPollTimer);
+  agentPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/agent/status');
+      const data = await res.json();
+      if (!data.running) {
+        document.getElementById('agentStatus').style.display = 'none';
+        clearInterval(agentPollTimer);
+        agentPollTimer = null;
+        loadStats(); loadBrands(); // Refresh after agent completes
+      }
+    } catch {}
+  }, 5000);
+}
+
+async function triggerRetakeScreenshots() {
+  const btn = document.getElementById('retakeScreenshotsBtn');
+  const statusEl = document.getElementById('retakeScreenshotsStatus');
+  const batchSize = Math.max(25, Math.min(500, Number(document.getElementById('retakeBatchSize').value || 200)));
+  const maxBatches = Math.max(1, Math.min(200, Number(document.getElementById('retakeMaxBatches').value || 50)));
+  const skipAlreadyRetaken = String(document.getElementById('retakeSkipAlready').value) === 'true';
+
+  btn.disabled = true;
+  btn.classList.add('opacity-60', 'cursor-not-allowed');
+  statusEl.className = 'text-xs text-amber-300';
+  statusEl.textContent = `Starting retake job... batchSize=${batchSize}, maxBatches=${maxBatches}, skipAlreadyRetaken=${skipAlreadyRetaken}`;
+
+  try {
+    const res = await fetch('/api/agent/retake-screenshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        limit: batchSize,
+        dryRun: false,
+        skipAlreadyRetaken,
+        untilExhausted: true,
+        batchSize,
+        maxBatches
+      })
+    });
+
+    if (res.status === 401) {
+      window.location.href = '/dashboard/login';
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || data.message || `Request failed (${res.status})`);
+    }
+
+    statusEl.className = 'text-xs text-emerald-300';
+    statusEl.textContent = `Retake started successfully at ${new Date().toLocaleTimeString()}. Check Workflow Step History and Railway logs for progress.`;
+    loadWorkflowRuns();
+    loadActivityLogs();
+  } catch (e) {
+    statusEl.className = 'text-xs text-red-300';
+    statusEl.textContent = `Retake start failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('opacity-60', 'cursor-not-allowed');
+  }
+}
+
+// -- Ops Panels ---------------------------------------------------
+async function loadActivityLogs() {
+  const el = document.getElementById('activityLogs');
+  if (!el) return;
+  el.innerHTML = '<div class="text-slate-500">Loading logs...</div>';
+  try {
+    const res = await fetch('/api/activity/logs?limit=120');
+    if (res.status === 401) { window.location.href = '/dashboard/login'; return; }
+    if (!res.ok) throw new Error(`Activity logs request failed: ${res.status}`);
+    const data = await res.json();
+    const logs = data.logs || [];
+    if (!logs.length) {
+      el.innerHTML = '<div class="text-slate-500">No logs yet.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table class="panel-table min-w-[880px]">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Phase</th>
+              <th>Source</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map((log) => `
+              <tr>
+                <td class="whitespace-nowrap">${fmtDate(log.createdAt)}</td>
+                <td class="uppercase">${escHtml(log.level || 'info')}</td>
+                <td>${escHtml(log.phase || 'general')}</td>
+                <td>${escHtml(log.source || 'runtime')}</td>
+                <td>${escHtml(log.message || '')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-300">Failed to load logs: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function loadNewsletterArtifacts() {
+  const el = document.getElementById('newsletterArtifacts');
+  if (!el) return;
+  el.innerHTML = '<div class="text-slate-500">Loading artifacts...</div>';
+  try {
+    const res = await fetch('/api/activity/newsletters?limit=80');
+    if (res.status === 401) { window.location.href = '/dashboard/login'; return; }
+    if (!res.ok) throw new Error(`Newsletter artifacts request failed: ${res.status}`);
+    const data = await res.json();
+    const rows = data.rows || [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="text-slate-500">No ingested newsletters found.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table class="panel-table min-w-[980px]">
+          <thead>
+            <tr>
+              <th>Received</th>
+              <th>Type</th>
+              <th>Brand</th>
+              <th>From</th>
+              <th>Subject</th>
+              <th>Screenshot</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td class="whitespace-nowrap">${fmtDate(row.receivedAt)}</td>
+                <td>
+                  <span class="badge-${statusClass(row.emailType === 'welcome' ? 'discovered' : 'active')} text-[10px] px-2 py-0.5 rounded-full">
+                    ${escHtml(row.emailType || 'newsletter')}
+                  </span>
+                </td>
+                <td>${escHtml((row.brand && row.brand.name) || 'Unresolved brand')}</td>
+                <td class="mono-cell">${escHtml(row.fromEmail || '')}</td>
+                <td>${escHtml(row.subject || '(no subject)')}</td>
+                <td>
+                  ${row.screenshotUrl
+                    ? `<a class="text-xs text-indigo-300 hover:text-indigo-200 underline" href="${row.screenshotUrl}" target="_blank">Open</a>`
+                    : `<span class="text-xs text-slate-500">None</span>`
+                  }
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-300">Failed to load artifacts: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function loadWorkflowRuns() {
+  const el = document.getElementById('workflowRuns');
+  if (!el) return;
+  el.innerHTML = '<div class="text-slate-500">Loading workflow history...</div>';
+  try {
+    const res = await fetch('/api/activity/workflow-runs?limit=120');
+    if (res.status === 401) { window.location.href = '/dashboard/login'; return; }
+    if (!res.ok) throw new Error(`Workflow runs request failed: ${res.status}`);
+    const data = await res.json();
+    const rows = data.runs || [];
+    const stepRuns = rows.filter((r) => r.step !== 'run_simplified_cycle');
+    if (!stepRuns.length) {
+      el.innerHTML = '<div class="text-slate-500">No workflow runs yet.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table class="panel-table min-w-[980px]">
+          <thead>
+            <tr>
+              <th>Started</th>
+              <th>Step</th>
+              <th>Status</th>
+              <th>Duration</th>
+              <th>Summary</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stepRuns.map((row) => {
+              const sum = row.summary || {};
+              const stats = [];
+              if (typeof sum.discovered === 'number') stats.push(`discovered: ${sum.discovered}`);
+              if (typeof sum.categorized === 'number') stats.push(`categorized: ${sum.categorized}`);
+              if (typeof sum.processed === 'number') stats.push(`processed: ${sum.processed}`);
+              if (typeof sum.fetched === 'number') stats.push(`fetched: ${sum.fetched}`);
+              if (typeof sum.matched === 'number') stats.push(`matched: ${sum.matched}`);
+              if (typeof sum.scanned === 'number') stats.push(`scanned: ${sum.scanned}`);
+              if (typeof sum.ingested === 'number') stats.push(`ingested: ${sum.ingested}`);
+              if (typeof sum.skipped === 'number') stats.push(`skipped: ${sum.skipped}`);
+              if (typeof sum.failed === 'number') stats.push(`failed: ${sum.failed}`);
+              if (typeof sum.confirmed === 'number') stats.push(`confirmed: ${sum.confirmed}`);
+              if (typeof sum.signupSuccess === 'number') stats.push(`signup ok: ${sum.signupSuccess}`);
+              if (typeof sum.signupFailed === 'number') stats.push(`signup failed: ${sum.signupFailed}`);
+              if (sum.runtimeReady === false) stats.push('runtime: not_ready');
+              const statusColor = row.status === 'success' ? 'text-emerald-300' : row.status === 'failed' ? 'text-red-300' : 'text-amber-300';
+              return `
+                <tr>
+                  <td class="whitespace-nowrap">${fmtDate(row.startedAt)}</td>
+                  <td class="mono-cell">${escHtml(row.step || '')}</td>
+                  <td class="uppercase ${statusColor}">${escHtml(row.status || 'running')}</td>
+                  <td>${row.durationMs ? `${Math.round(row.durationMs / 1000)}s` : '-'}</td>
+                  <td>${stats.length ? escHtml(stats.join(' | ')) : 'no summary metrics'}</td>
+                  <td>${escHtml(row.error || '-')}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-300">Failed to load workflow history: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function loadWorkflowMatrix() {
+  const el = document.getElementById('workflowMatrix');
+  if (!el) return;
+  el.innerHTML = '<div class="text-slate-500">Loading workflow matrix...</div>';
+  try {
+    const res = await fetch('/api/brands/workflow-matrix?limit=200&page=1');
+    if (res.status === 401) { window.location.href = '/dashboard/login'; return; }
+    if (!res.ok) throw new Error(`Workflow matrix request failed: ${res.status}`);
+    const data = await res.json();
+    const rows = data.rows || [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="text-slate-500">No brands found for workflow matrix.</div>';
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="mb-2 text-[11px] text-slate-500">Showing ${rows.length} of ${data.pagination?.total || rows.length} brands</div>
+      <div class="table-wrap">
+        <table class="panel-table min-w-[1500px]">
+          <thead>
+            <tr>
+              <th rowspan="2">Brand</th>
+              <th rowspan="2">Current Status</th>
+              <th colspan="3" class="text-center">Signup</th>
+              <th colspan="3" class="text-center">Email Lifecycle</th>
+              <th colspan="2" class="text-center">Finalization</th>
+              <th rowspan="2">Updated</th>
+            </tr>
+            <tr>
+              <th>Discovered</th>
+              <th>Attempt</th>
+              <th>Submitted</th>
+              <th>Welcome</th>
+              <th>Confirmation</th>
+              <th>Newsletter</th>
+              <th>Ingestion</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>
+                  <div class="font-semibold">${escHtml(row.name || '')}</div>
+                  <div class="text-[10px] text-slate-500 mono-cell">${escHtml(row.domain || '')}</div>
+                </td>
+                <td><span class="badge-${statusClass(row.onboardingStatus)} text-[10px] px-2 py-0.5 rounded-full">${statusLabel(row.onboardingStatus)}</span></td>
+                <td>${workflowCell(row.steps?.discovered)}</td>
+                <td>${workflowCell(row.steps?.signupAttempt)}</td>
+                <td>${workflowCell(row.steps?.signupSubmitted)}</td>
+                <td>${workflowCell(row.steps?.welcomeEmail)}</td>
+                <td>${workflowCell(row.steps?.confirmation)}</td>
+                <td>${workflowCell(row.steps?.newsletterSeen)}</td>
+                <td>${workflowCell(row.steps?.ingestion)}</td>
+                <td>${workflowCell(row.steps?.active)}</td>
+                <td class="whitespace-nowrap">${row.updatedAt ? escHtml(fmtDate(row.updatedAt)) : '-'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-300">Failed to load workflow matrix: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function loadFailedSignupQueue() {
+  const el = document.getElementById('failedSignupQueue');
+  if (!el) return;
+  el.innerHTML = '<div class="text-slate-500">Loading manual signup queue...</div>';
+  failedSignupQueueRows = [];
+  try {
+    const res = await fetch('/api/brands/failed-signup-queue?limit=500&days=30');
+    if (res.status === 401) { window.location.href = '/dashboard/login'; return; }
+    if (!res.ok) throw new Error(`Failed signup queue request failed: ${res.status}`);
+    const data = await res.json();
+    const rows = data.rows || [];
+    failedSignupQueueRows = rows;
+    if (!rows.length) {
+      el.innerHTML = '<div class="text-slate-500">No failed signup queue rows found in the selected window.</div>';
+      return;
+    }
+
+    const summaryText = Object.entries(data.summaryByCode || {})
+      .map(([k, v]) => `${k}=${v}`)
+      .join(' | ');
+
+    el.innerHTML = `
+      <div class="mb-2 text-[11px] text-slate-500">Rows: ${rows.length}${summaryText ? ` | ${escHtml(summaryText)}` : ''}</div>
+      <div class="table-wrap">
+        <table class="panel-table min-w-[1200px]">
+          <thead>
+            <tr>
+              <th>Brand</th>
+              <th>Website</th>
+              <th>Failure</th>
+              <th>Recommended Action</th>
+              <th>Category/Tier</th>
+              <th>Last Failure</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>
+                  <div class="font-semibold">${escHtml(row.name || '')}</div>
+                  <div class="text-[10px] text-slate-500 mono-cell">${escHtml(row.domain || '')}</div>
+                </td>
+                <td class="mono-cell">
+                  <a class="text-indigo-300 hover:text-indigo-200 underline" href="${escHtml(row.websiteUrl || '')}" target="_blank">${escHtml(row.websiteUrl || '')}</a>
+                </td>
+                <td>
+                  <div>${escHtml(row.signupFailureCategory || 'unknown')} / ${escHtml(row.signupFailureCode || 'unknown')}</div>
+                  <div class="text-[10px] text-slate-500">${escHtml(row.latestAttemptReason || row.signupError || '')}</div>
+                </td>
+                <td class="mono-cell">${escHtml(row.recommendedAction || 'manual_review_required')}</td>
+                <td>${escHtml(row.primaryCategory || '-')} / ${escHtml(row.brandTier || '-')}</td>
+                <td class="whitespace-nowrap">${row.signupFailureAt ? escHtml(fmtDate(row.signupFailureAt)) : '-'}</td>
+                <td>${escHtml(row.notes || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-300">Failed to load manual signup queue: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function copyFailedQueueJSON() {
+  if (!failedSignupQueueRows.length) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(failedSignupQueueRows, null, 2));
+    alert(`Copied ${failedSignupQueueRows.length} queue rows to clipboard as JSON`);
+  } catch (e) {
+    alert(`Copy failed: ${e.message}`);
+  }
+}
+
+async function copyCoworkPrompts() {
+  if (!failedSignupQueueRows.length) return;
+  const text = failedSignupQueueRows
+    .map((row, idx) => `### Task ${idx + 1}\n${row.coworkPrompt || ''}`)
+    .join('\n\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    alert(`Copied ${failedSignupQueueRows.length} cowork prompts to clipboard`);
+  } catch (e) {
+    alert(`Copy failed: ${e.message}`);
+  }
+}
+
+// -- Filters & Pagination ----------------------------------------
+function applyFilters() {
+  currentPage = 1;
+  currentFilters = {
+    status:   document.getElementById('filterStatus').value,
+    category: document.getElementById('filterCategory').value,
+    tier:     document.getElementById('filterTier').value,
+    sort:     document.getElementById('filterSort').value,
+  };
+  loadBrands();
+}
+
+function debounceSearch(val) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    currentFilters.search = val;
+    currentPage = 1;
+    loadBrands();
+  }, 400);
+}
+
+function changePage(dir) {
+  currentPage = Math.max(1, currentPage + dir);
+  loadBrands();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderPagination({ total, page, limit, pages }) {
+  const el = document.getElementById('pagination');
+  if (pages <= 1) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  document.getElementById('pageInfo').textContent = `Page ${page} of ${pages}`;
+  document.getElementById('prevPage').disabled = page === 1;
+  document.getElementById('nextPage').disabled = page === pages;
+}
+
+// -- Helpers -----------------------------------------------------
+function statusClass(s) {
+  const map = { active:'active', awaiting_confirmation:'awaiting', failed:'failed',
+    discovered:'discovered', subscribing:'subscribing', captcha_blocked:'captcha',
+    skipped:'skipped', confirmed:'active' };
+  return map[s] || 'skipped';
+}
+function statusLabel(s) {
+  const map = { active:' Active', awaiting_confirmation:'[...] Awaiting', failed:' Failed',
+    discovered:' Discovered', subscribing:' Subscribing', captcha_blocked:' CAPTCHA',
+    skipped:'- Skipped', confirmed:' Confirmed' };
+  return map[s] || s;
+}
+function scoreClass(n) { return n >= 7 ? 'score-high' : n >= 4 ? 'score-mid' : 'score-low'; }
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function fmtDate(d) { try { return new Date(d).toLocaleString(); } catch { return '-'; } }
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function infoRow(label, value) {
+  return `<div class="glass rounded-lg p-3"><p class="text-xs text-slate-500 mb-1">${label}</p><p class="text-sm">${value}</p></div>`;
+}
+function workflowCell(state) {
+  const value = String(state || 'todo').toLowerCase();
+  const cls = value === 'done' ? 'wf-done' : value === 'pending' ? 'wf-pending' : value === 'failed' ? 'wf-failed' : 'wf-todo';
+  return `<span class="wf-cell ${cls}">${escHtml(value)}</span>`;
+}
+</script>
+</body>
+</html>

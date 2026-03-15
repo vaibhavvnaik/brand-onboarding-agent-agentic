@@ -1,0 +1,33 @@
+name: Fix Encoding
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Run fix-encoding
+        run: node fix-encoding.js
+      - name: Fix broken keywords
+        run: |
+          node -e "const fs=require('fs'),path=require('path'),{spawnSync}=require('child_process');function ok(f){return spawnSync('node',['--check',f],{encoding:'utf8'}).status===0}function fix(c){return c.replace(/\btrn\b/g,'return').replace(/\beturn\b/g,'return')}const dirs=['agents','config','middleware','models','routes','services','utils'],files=[];for(const dir of dirs){if(!fs.existsSync(dir))continue;(function w(d){for(const f of fs.readdirSync(d)){const fp=path.join(d,f);fs.statSync(fp).isDirectory()?w(fp):f.endsWith('.js')&&files.push(fp)}})(dir)}fs.existsSync('index.js')&&files.push('index.js');let n=0;for(const f of files){if(!ok(f)){const orig=fs.readFileSync(f,'utf8'),rep=fix(orig);if(rep!==orig){fs.writeFileSync(f,rep,'utf8');ok(f)?(console.log('Fixed: '+f),n++):fs.writeFileSync(f,orig,'utf8')}else{console.log('Cannot fix: '+f)}}}console.log('Done. Fixed '+n+' files');"
+      - name: Verify syntax
+        run: |
+          for f in $(find agents config middleware models routes services utils -name "*.js" 2>/dev/null) index.js; do
+            [ -f "$f" ] || continue
+            node --check "$f" && echo "OK: $f" || echo "FAIL: $f"
+          done
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Fix broken keywords after encoding strip"
+          git push

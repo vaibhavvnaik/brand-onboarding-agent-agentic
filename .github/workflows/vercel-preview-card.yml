@@ -1,0 +1,111 @@
+name: Vercel Preview → Issue Card
+
+# ─────────────────────────────────────────────
+# TRIGGER: fires when Vercel reports a deployment status
+# Vercel posts deployment_status events via its GitHub integration.
+# No extra config needed beyond connecting your repo in Vercel.
+# ─────────────────────────────────────────────
+on:
+  deployment_status:
+
+permissions:
+  issues:           write   # post comment
+  deployments:      read    # read deployment metadata
+
+jobs:
+  post-preview-card:
+    name: Post Vercel Preview Card to Issue
+    runs-on: ubuntu-latest
+
+    # Only act on successful Vercel deployments for issue branches
+    if: |
+      github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment.ref, 'issue-')
+
+    steps:
+      - name: Extract issue number and post card
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ github.event.deployment_status.environment_url }}
+          BRANCH_REF: ${{ github.event.deployment.ref }}
+          ENV_NAME:   ${{ github.event.deployment_status.environment }}
+        with:
+          script: |
+            const branch     = process.env.BRANCH_REF;
+            const previewUrl = process.env.PREVIEW_URL;
+            const envName    = process.env.ENV_NAME;
+
+            // Extract issue number from branch pattern: issue-42/some-slug
+            const match = branch.match(/^issue-(\d+)/);
+            if (!match) {
+              console.log(`Branch "${branch}" doesn't match issue-N pattern — skipping`);
+              return;
+            }
+
+            const issueNumber = parseInt(match[1], 10);
+            const deployedAt  = new Date().toUTCString();
+            const repoUrl     = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const branchUrl   = `${repoUrl}/tree/${branch}`;
+
+            // ── Check if we already posted a Vercel card for this branch ──
+            // Avoids duplicate comments on re-deployments (optional: remove to always post)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: issueNumber,
+              per_page:     50
+            });
+
+            const alreadyPosted = comments.some(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('▲ Vercel Preview') &&
+              c.body.includes(branch)
+            );
+
+            // Build the Vercel info card
+            const card = `## ▲ Vercel Preview Deployed
+
+            | Field | Detail |
+            |-------|--------|
+            | **Status** | ✅ Ready |
+            | **Environment** | \`${envName}\` |
+            | **Branch** | [\`${branch}\`](${branchUrl}) |
+            | **Preview URL** | [${previewUrl}](${previewUrl}) |
+            | **Deployed at** | ${deployedAt} |
+
+            ### 👀 Review checklist (before you create a PR)
+            - [ ] Visual/functional check at the preview URL above
+            - [ ] No console errors in browser devtools
+            - [ ] Mobile responsive (if applicable)
+            - [ ] Tested the happy path described in the issue
+
+            ### ⏸ Waiting for you
+            No PR has been opened automatically.
+            When you're satisfied, create a PR from [\`${branch}\`](${branchUrl}) → \`main\` and merge.
+
+            ---
+            *Posted automatically by the Vercel Preview pipeline*`;
+
+            if (alreadyPosted) {
+              // Update the existing comment instead of creating a duplicate
+              const existingComment = comments.find(c =>
+                c.user.login === 'github-actions[bot]' &&
+                c.body.includes('▲ Vercel Preview') &&
+                c.body.includes(branch)
+              );
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existingComment.id,
+                body:       card.replace(/^            /gm, '')
+              });
+              console.log(`Updated existing Vercel card comment on issue #${issueNumber}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issueNumber,
+                body:         card.replace(/^            /gm, '')
+              });
+              console.log(`Posted Vercel preview card on issue #${issueNumber}`);
+            }

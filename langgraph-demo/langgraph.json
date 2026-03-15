@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "brand_agent_demo": "./src/graph.ts:graph"
+  },
+  "env": ".env"
+}

@@ -1,0 +1,9 @@
+node_modules
+.local-debs
+.local-libs
+artifacts/newsletters
+artifacts/logos
+artifacts/signup-failures
+logs
+failed-signup-queue-*.csv
+.env
